@@ -2,71 +2,49 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Upload Arduino Code</title>
-  <style>
-    body { font-family: Arial, sans-serif; max-width: 600px; margin: 40px auto; }
-    textarea, select, input { width: 100%; margin: 10px 0; }
-    button { padding: 10px 20px; font-size: 1em; margin-top: 10px; }
-    #response { margin-top: 20px; white-space: pre-wrap; background: #f0f0f0; padding: 10px; border-radius: 5px; min-height: 60px; }
-  </style>
+  <title>Arduino Upload via WebSocket</title>
 </head>
 <body>
-
-  <h2>Upload Arduino Code</h2>
-
-  <label>Arduino Code:</label>
-  <textarea id="code" placeholder="Write your Arduino code here...">void setup() { pinMode(13, OUTPUT); } void loop() { digitalWrite(13, HIGH); delay(1000); digitalWrite(13, LOW); delay(1000); }</textarea>
-
-  <label for="fqbn">Select Board (FQBN):</label>
-  <select id="fqbn">
-    <option value="arduino:avr:uno">Arduino Uno</option>
-    <option value="arduino:avr:nano">Arduino Nano</option>
-    <option value="arduino:avr:mega">Arduino Mega</option>
-    <!-- Add more if needed -->
-  </select>
-
-  <label for="port">Enter Port (leave blank for auto-detect):</label>
-  <input type="text" id="port" placeholder="e.g., /dev/ttyUSB0 or COM3" />
-
+  <h1>Upload Arduino Code Using WebSocket</h1>
   <button id="uploadBtn">Upload Code</button>
 
-  <div id="response"></div>
+  <pre id="log"></pre>
 
   <script>
+    const log = document.getElementById('log');
     const uploadBtn = document.getElementById('uploadBtn');
-    const responseDiv = document.getElementById('response');
 
     uploadBtn.addEventListener('click', () => {
-      const code = document.getElementById('code').value.trim();
-      const fqbn = document.getElementById('fqbn').value;
-      const port = document.getElementById('port').value.trim();
+      const ws = new WebSocket('ws://localhost:3001');
 
-      if (!code) {
-        responseDiv.textContent = '❗ Please enter Arduino code.';
-        return;
-      }
+      ws.addEventListener('open', () => {
+        log.textContent += 'Connected to WebSocket server\n';
 
-      responseDiv.textContent = 'Uploading...';
+        const uploadData = {
+          action: 'upload',
+          code: `void setup() { pinMode(13, OUTPUT); } void loop() { digitalWrite(13, HIGH); delay(1000); digitalWrite(13, LOW); delay(1000); }`,
+          fqbn: 'arduino:avr:uno'
+        };
 
-      fetch('http://localhost:3000/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code,
-          fqbn,
-          port: port || null  // send null if blank to allow auto-detection
-        }),
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          responseDiv.textContent = '✅ Upload successful: ' + (data.message || '');
+        ws.send(JSON.stringify(uploadData));
+        log.textContent += 'Sent upload request\n';
+      });
+
+      ws.addEventListener('message', (event) => {
+        const response = JSON.parse(event.data);
+        if (response.success) {
+          log.textContent += 'Upload succeeded: ' + response.message + '\n';
         } else {
-          responseDiv.textContent = '❌ Upload failed: ' + (data.message || 'Unknown error');
+          log.textContent += 'Upload failed: ' + (response.message || response.error) + '\n';
         }
-      })
-      .catch(err => {
-        responseDiv.textContent = '❌ Error: ' + err.message;
+      });
+
+      ws.addEventListener('error', (err) => {
+        log.textContent += 'WebSocket error: ' + err.message + '\n';
+      });
+
+      ws.addEventListener('close', () => {
+        log.textContent += 'WebSocket connection closed\n';
       });
     });
   </script>
