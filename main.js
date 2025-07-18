@@ -5,12 +5,50 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const fs = require('fs/promises');
 const os = require('os');
+const find = require('find-process');
 const { exec } = require('child_process');
 const { downloadAndInstallArduinoCli, getArduinoCliPath } = require('./installer');
 
 let mainWindow;
 let arduinoCliPath;
 
+function killPort(port) {
+  return new Promise((resolve, reject) => {
+    const cmd = process.platform === 'win32'
+      ? `netstat -ano | findstr :${port}`
+      : `lsof -i tcp:${port} | grep LISTEN`;
+
+    exec(cmd, (err, stdout) => {
+      if (err || !stdout) {
+        resolve(); // Port is free or not found, nothing to kill
+        return;
+      }
+
+      const lines = stdout.trim().split('\n');
+      const pids = lines.map(line => {
+        const parts = line.trim().split(/\s+/);
+        return process.platform === 'win32'
+          ? parts[4] // PID column in netstat for Windows
+          : parts[1]; // PID column in lsof for Unix
+      });
+
+      const uniquePids = [...new Set(pids)];
+
+      Promise.all(
+        uniquePids.map(pid => {
+          return new Promise((res, rej) => {
+            try {
+              process.kill(pid, 'SIGKILL');
+              res();
+            } catch (e) {
+              rej(e);
+            }
+          });
+        })
+      ).then(resolve).catch(reject);
+    });
+  });
+}
 async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 600,
@@ -76,7 +114,11 @@ async function detectPort(fqbn) {
 
 async function startHttpServer() {
   const appServer = express();
-  appServer.use(cors());
+  appServer.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type'],
+  }));
   appServer.use(bodyParser.json({ limit: '5mb' }));
 
   appServer.post('/upload', async (req, res) => {
@@ -88,6 +130,7 @@ async function startHttpServer() {
       res.status(400).json({ error: 'Missing required fields: code, fqbn' });
       return;
     }
+
 
     try {
       const sketchDir = await fs.mkdtemp(path.join(os.tmpdir(), 'arduino-sketch-'));
@@ -118,8 +161,11 @@ async function startHttpServer() {
       res.status(500).json({ success: false, message: err.toString() });
     }
   });
+  
+
 
   const PORT = 3000;
+  await killPort(PORT);
   appServer.listen(PORT, () => {
     mainWindow.webContents.send('log', `HTTP server running on http://localhost:${PORT}`);
   });
