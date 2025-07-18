@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Arduino Upload Agent</title>
+  <style>
+    body { font-family: monospace; padding: 10px; background: #222; color: #eee; }
+    #logs { white-space: pre-wrap; max-height: 100vh; overflow-y: auto; }
+  </style>
+</head>
+<body>
+  <h2>Arduino Upload Agent Logs</h2>
+  <div id="logs"></div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+
+    const logsDiv = document.getElementById('logs');
+    ipcRenderer.on('log', (event, message) => {
+      logsDiv.textContent += message + "\n";
+      logsDiv.scrollTop = logsDiv.scrollHeight;
+    });
+  </script>
+</body>
+</html>
