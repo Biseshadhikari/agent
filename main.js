@@ -114,11 +114,14 @@ async function detectPort(fqbn) {
 
 async function startHttpServer() {
   const appServer = express();
-  appServer.use(cors({
-    origin: '*',
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type'],
-  }));
+ appServer.use(cors({
+  origin: (origin, callback) => {
+    // allow requests with no origin like from Electron or file://
+    callback(null, true);
+  },
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type'],
+}));
   appServer.use(bodyParser.json({ limit: '5mb' }));
 
   appServer.post('/upload', async (req, res) => {
